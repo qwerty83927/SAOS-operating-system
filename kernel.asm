@@ -53,11 +53,11 @@ idtr:
  dw (64*2)-1
  dd idt
 
+shift_next: db 0
 keyboard_map: db 0,27,"1234567890-=BTqwertyuiop[]E",2,"asdfghjkl;'~",1,"\zxcvbnm,./",1,0,0," ",0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,4,0,5,0,0,6,0,0,0,0,0
-cursor_pos: dd 0
+keyboard_shift_map: db 0,0,"!@#$%^&*()_+BTQWERTYUIOP{}E",2,"ASDFGHJKL:",34,"~",1,"|ZXCVBNM<>?",1,0,0," ",0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,4,0,5,0,0,6,0,0,0,0,0
 
 section .text
-global cursor_pos
 
 isr0:
  push BYTE 0
@@ -163,6 +163,25 @@ irq15:
  jmp irq_common_stub
 
 irq_common_stub:
+ pusha
+ mov ax, ds
+ push eax
+ mov ax, 0x10
+ mov ds, ax
+ mov es, ax
+ mov fs, ax
+ mov gs, ax
+ push esp
+ call irq_handler
+ pop eax
+ pop eax
+ mov ds, ax
+ mov es, ax
+ mov fs, ax
+ mov gs, ax
+ popa
+ add esp, 8
+ iret
 isr_common_stub:
  pusha
  mov ax, ds
@@ -173,7 +192,7 @@ isr_common_stub:
  mov fs, ax
  mov gs, ax
  push esp
- call handler
+ call isr_handler
  pop eax
  pop eax
  mov ds, ax
@@ -184,7 +203,9 @@ isr_common_stub:
  add esp, 8
  iret
 
-handler:
+isr_handler:
+ ret
+irq_handler:
  ret
 
 keyboard_handler:
@@ -195,7 +216,13 @@ keyboard_handler:
  cmp al, BYTE 0
  jle .exit
 
+ cmp [shift_next], BYTE 1
+ je .shift_keyboard
+
  mov eax, [keyboard_map+eax]
+
+ cmp al, BYTE 1
+ je .shift_next_key
 
  push eax
  int 2
@@ -253,9 +280,22 @@ keyboard_handler:
 .exit:
  popa
  ret
+.shift_next_key:
+ mov [shift_next], BYTE 1
+ jmp .exit
+.shift_keyboard:
+ mov [shift_next], BYTE 0
+ mov eax, [keyboard_shift_map+eax]
+ push eax
+ int 2
+ pop eax
+ mov [0xb8000+ebx*2], BYTE al
+ mov [0xb8000+ebx*2+1], BYTE 0x0f
+ inc ebx
+ int 3
+ jmp .exit
 
 [extern main]
-
 kernel32:
  mov ax, dataseg
  mov ds, ax
@@ -397,10 +437,11 @@ kernel32:
  shr eax,16
  mov [idt+47*8+6],ax
 
- sti
  mov edx, 0x21
  mov al, 0xFD
  out dx, al
+
+ sti
 
  call main
 
