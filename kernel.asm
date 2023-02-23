@@ -295,6 +295,26 @@ keyboard_handler:
  int 3
  jmp .exit
 
+global get_cursor
+get_cursor:
+ push ebp
+ mov ebp, esp
+ int 2
+ add ebx, ebx
+ mov eax, ebx
+ pop ebp
+ ret
+
+global set_cursor
+set_cursor:
+ push ebp
+ mov ebp, esp
+ mov ebx, [ebp+8]
+ dec ebx
+ int 3
+ pop ebp
+ ret
+
 [extern main]
 kernel32:
  mov ax, dataseg
